@@ -1,6 +1,8 @@
 {
   "name": "AI Ops Wizard - Fraud Analyze (advanced)",
   "active": true,
+  "settings": {},
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -36,7 +38,7 @@
         "requestMethod": "POST",
         "url": "={{ $json[\"env\"]?.BACKEND_URL || 'http://api:8000/analyze' }}",
         "jsonParameters": true,
-        "bodyParametersJson": "={{ JSON.stringify({ id: $json.id, payload: $json.payload || $json }) }}",
+        "bodyParametersJson": "={{ JSON.stringify({ amount: ($json.payload?.amount || $json.amount || 0), currency: ($json.payload?.currency || 'USD'), merchant: ($json.payload?.merchant || $json.merchant || null), timestamp: ($json.payload?.timestamp || new Date().toISOString()), ip_address: ($json.payload?.ip_address || $json.payload?.ip || $json.ip || null), customer_id: ($json.payload?.customer_id || $json.customer_id || null) }) }}",
         "options": { "throwHttpErrors": false }
       },
       "name": "Call AI-Core (/analyze)",
