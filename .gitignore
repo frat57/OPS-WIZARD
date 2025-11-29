@@ -1,0 +1,47 @@
+.env
+.env.*
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Alembic/SQL migration artefacts (local)
+*.db
+
+# Node / frontend
+node_modules/
+.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+pnpm-lock.yaml
+
+# Editor/IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# macOS
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+# local postgres volume (if mistakenly added)
+pgdata/
+
+# logs
+*.log
+logs/

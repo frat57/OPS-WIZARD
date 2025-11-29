@@ -1,0 +1,185 @@
+{
+  "name": "AI Ops Wizard - Fraud Analyze (example)",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fraud-webhook",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "name": "Webhook In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [],
+          "number": [],
+          "string": [
+            {
+              "name": "id",
+              "value": "={{$json[\"id\"] || $json.payload?.id || $randomString(8)}}"
+            },
+            {
+              "name": "raw",
+              "value": "={{JSON.stringify($json)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Meta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$json[\"env\"]?.BACKEND_URL || 'http://api:8000/analyze'}}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ JSON.stringify({ id: $json.id, payload: $json.payload || $json }) }}"
+      },
+      "name": "Call AI-Core (/analyze)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "contains",
+            "value1": "={{ $json[\"body\"]?.suggested_action || '' }}",
+            "value2": "HOLD"
+          }
+        ],
+        "combineOperation": "any"
+      },
+      "name": "Is HOLD?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [960, 240]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "contains",
+            "value1": "={{ $json[\"body\"]?.suggested_action || '' }}",
+            "value2": "MANUAL_REVIEW"
+          }
+        ],
+        "combineOperation": "any"
+      },
+      "name": "Is MANUAL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [960, 360]
+    },
+    {
+      "parameters": {
+        "channel": "#fraud-alerts",
+        "text": "={{ `ALERT: event ${$json[\"body\"]?.id || $json.id} recommended action=${$json[\"body\"]?.suggested_action} score=${$json[\"body\"]?.score}` }}"
+      },
+      "name": "Notify Slack (example)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1200, 360]
+    },
+    {
+      "parameters": {
+        "operation": "response",
+        "responseCode": 200,
+        "responseBody": "={{ { status: 'ok', id: $json.body?.id || $json.id, action: $json.body?.suggested_action } }}"
+      },
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 240]
+    }
+  ],
+  "connections": {
+    "Webhook In": {
+      "main": [
+        [
+          {
+            "node": "Set Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Meta": {
+      "main": [
+        [
+          {
+            "node": "Call AI-Core (/analyze)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AI-Core (/analyze)": {
+      "main": [
+        [
+          {
+            "node": "Is HOLD?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is MANUAL?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is HOLD?": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is MANUAL?": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack (example)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

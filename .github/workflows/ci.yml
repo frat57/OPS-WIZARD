@@ -1,0 +1,56 @@
+name: CI - migrations & smoke
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: aiops
+          POSTGRES_PASSWORD: aiops_password
+          POSTGRES_DB: aiops_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aiops" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..20}; do pg_isready -h localhost -p 5432 -U aiops && break || sleep 1; done
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://aiops:aiops_password@localhost:5432/aiops_db
+        run: |
+          alembic -c backend/alembic.ini upgrade head
+
+      - name: Start backend (uvicorn)
+        env:
+          DATABASE_URL: postgresql+psycopg://aiops:aiops_password@localhost:5432/aiops_db
+        run: |
+          nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 2
+
+      - name: Smoke test /health
+        run: |
+          curl -f http://127.0.0.1:8000/health

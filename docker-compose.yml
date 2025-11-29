@@ -1,0 +1,112 @@
+services:
+  postgres:
+    image: postgres:15
+    restart: always
+    env_file: .env
+    environment:
+      # keep a default so simple `docker compose up` works if .env isn't present
+      POSTGRES_USER: ${POSTGRES_USER:-aiops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aiops_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # ensure we check the actual DB name (some clients use default DB equal to user name)
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aiops} -d ${POSTGRES_DB:-aiops_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aiops-net
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    ports:
+      - 5678:5678
+    env_file: .env
+    environment:
+      # n8n persistence using postgres
+      DB_TYPE: "postgresdb"
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-aiops_db}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-aiops}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-aiops_password}
+      # simple auth for local/dev. Replace for prod (vault, k8s secrets, etc.)
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-password}
+      # AI / external API keys (optional)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5678/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - aiops-net
+
+  api:
+    build: ./backend
+    restart: on-failure
+    ports:
+      - 8000:8000
+    env_file: .env
+    environment:
+      # The backend reads DATABASE_URL at runtime (conventionally used by SQLAlchemy/PSQL libs)
+      # Use a container-local connection string so host env vars cannot inadvertently override the running container
+      DATABASE_URL: "postgresql://aiops:aiops_password@postgres:5432/aiops_db"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - aiops-net
+
+  frontend:
+    build: ./frontend
+    restart: on-failure
+    ports:
+      - 3000:3000
+    env_file: .env
+    environment:
+      # Force the frontend inside Docker to talk to the `api` service on the internal network
+      NEXT_PUBLIC_BACKEND_URL: "http://api:8000"
+      NEXT_PUBLIC_N8N_WEBHOOK: ${NEXT_PUBLIC_N8N_WEBHOOK:-http://localhost:5678/webhook/fraud-webhook}
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      - aiops-net
+
+  # lightweight DB admin for debugging locally
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+    networks:
+      - aiops-net
+
+volumes:
+  pgdata:
+  n8n_data:
+
+networks:
+  aiops-net:
+    driver: bridge
