@@ -7,7 +7,7 @@ File: `example_fraud_workflow.json` — high-level flow:
 - Webhook In (POST /webhook/fraud-webhook)
 - Set Meta (normalize incoming payload)
 - Call AI-Core (/analyze)
-- Branch based on `suggested_action` or `score` (HOLD, MANUAL_REVIEW, AUTO_APPROVE)
+- Branch based on `suggested_action` or `score` (BLOCK, REVIEW, ALLOW)
 - Example actions: Notify Slack or return response to source
 
 How to import into n8n (local UI):

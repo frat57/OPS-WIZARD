@@ -48,11 +48,11 @@
     {
       "parameters": {
         "rules": [
-          { "operation": "contains", "value1": "={{ $json[\"body\"]?.suggested_action || '' }}", "value2": "HOLD" }
+          { "operation": "contains", "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}", "value2": "BLOCK" }
         ],
         "combineOperation": "any"
       },
-      "name": "Is HOLD?",
+      "name": "Is BLOCK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [1160, 220]
@@ -60,22 +60,26 @@
     {
       "parameters": {
         "rules": [
-          { "operation": "contains", "value1": "={{ $json[\"body\"]?.suggested_action || '' }}", "value2": "MANUAL_REVIEW" }
+          { "operation": "contains", "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}", "value2": "REVIEW" }
         ],
         "combineOperation": "any"
       },
-      "name": "Is MANUAL?",
+      "name": "Is REVIEW?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [1160, 380]
     },
     {
       "parameters": {
-        "channel": "#fraud-alerts",
-        "text": "={{ `ALERT: event ${$json[\"body\"]?.id || $json.id} recommended=${$json[\"body\"]?.suggested_action} score=${$json[\"body\"]?.score || ''}` }}"
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://ops.example.internal/fraud/notify",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.data?.id || $json.id, action: $json[\"body\"]?.data?.suggested_action, score: $json[\"body\"]?.data?.score, first_step_title: $json[\"body\"]?.data?.wizard_steps?.[0]?.title || '', reasoning: $json[\"body\"]?.data?.reasoning, meta: $json[\"body\"]?.meta || {} }) }}",
+        "options": { "throwHttpErrors": false }
       },
-      "name": "Notify Slack",
-      "type": "n8n-nodes-base.slack",
+      "name": "Notify Ops Webhook",
+      "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [1400, 360]
     },
@@ -85,7 +89,7 @@
         "requestMethod": "POST",
         "url": "https://crm.example.internal/api/cases",
         "jsonParameters": true,
-        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.id || $json.id, reason: $json[\"body\"]?.reasoning || 'Manual review required', meta: $json[\"body\"] }) }}",
+        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.data?.id || $json.id, reason: $json[\"body\"]?.data?.reasoning || 'Manual review required', meta: $json[\"body\"] }) }}",
         "options": { "throwHttpErrors": false }
       },
       "name": "Create CRM Case (placeholder)",
@@ -95,9 +99,9 @@
     },
     {
       "parameters": {
-        "value1": "={{ $json[\"body\"]?.statusCode || 200 }}",
-        "operation": "isGreaterThan",
-        "value2": 299
+        "value1": "={{ $json[\"body\"]?.error?.code || $json[\"body\"]?.error?.message || '' }}",
+        "operation": "isNotEmpty",
+        "value2": ""
       },
       "name": "Is Error?",
       "type": "n8n-nodes-base.if",
@@ -119,7 +123,7 @@
       "parameters": {
         "operation": "response",
         "responseCode": 200,
-        "responseBody": "={{ { status: 'ok', id: $json.body?.id || $json.id, action: $json.body?.suggested_action } }}"
+        "responseBody": "={{ { status: $json.body?.error ? 'error' : 'ok', id: $json.body?.data?.id || $json.id, action: $json.body?.data?.suggested_action, error: $json.body?.error || null } }}"
       },
       "name": "Return Response",
       "type": "n8n-nodes-base.respondToWebhook",

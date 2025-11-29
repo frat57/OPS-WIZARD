@@ -1,0 +1,316 @@
+{
+  "name": "Fraud Wizard - Multi-Source Pipeline",
+  "settings": {},
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fraud-multisource",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "name": "Webhook In (multi-source)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "id",
+              "value": "={{ $json.id || 'evt-' + $randomString(8) }}"
+            },
+            {
+              "name": "source_type",
+              "value": "={{ $json.source_type || $json.source || 'payments' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Meta (id + source)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "equal",
+            "value1": "={{ $json.source_type }}",
+            "value2": "payments"
+          }
+        ]
+      },
+      "name": "Is Payments?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "equal",
+            "value1": "={{ $json.source_type }}",
+            "value2": "login"
+          }
+        ]
+      },
+      "name": "Is Login?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "equal",
+            "value1": "={{ $json.source_type }}",
+            "value2": "kyc"
+          }
+        ]
+      },
+      "name": "Is KYC?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "normalized",
+              "value": "={{ {
+                amount: $json.payload?.amount || $json.amount || 0,
+                currency: $json.payload?.currency || 'USD',
+                customer_id: $json.payload?.customer_id || $json.customer_id || '',
+                transaction_id: $json.id,
+                merchant: $json.payload?.merchant || $json.merchant || null,
+                channel: $json.payload?.channel || 'payments',
+                ip_address: $json.payload?.ip_address || $json.payload?.ip || $json.ip || null,
+                ip_country: $json.payload?.ip_country || null,
+                device_id: $json.payload?.device_id || null,
+                user_agent: $json.payload?.user_agent || null,
+                previous_tx_count_24h: $json.payload?.previous_tx_count_24h || null,
+                previous_chargebacks_90d: $json.payload?.previous_chargebacks_90d || null
+              } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Normalize Payments",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [920, 140]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "normalized",
+              "value": "={{ {
+                amount: 0,
+                currency: 'USD',
+                customer_id: $json.user?.id || $json.user_id || '',
+                transaction_id: $json.id,
+                merchant: null,
+                channel: 'login',
+                ip_address: $json.ip || $json.payload?.ip || null,
+                ip_country: $json.ip_country || null,
+                device_id: $json.device_id || null,
+                user_agent: $json.user_agent || null,
+                previous_tx_count_24h: null,
+                previous_chargebacks_90d: null
+              } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Normalize Login",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [920, 260]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "normalized",
+              "value": "={{ {
+                amount: $json.payload?.declared_income || 0,
+                currency: 'USD',
+                customer_id: $json.customer_id || $json.user_id || '',
+                transaction_id: $json.id,
+                merchant: null,
+                channel: 'kyc',
+                ip_address: null,
+                ip_country: $json.country || null,
+                device_id: null,
+                user_agent: null,
+                previous_tx_count_24h: null,
+                previous_chargebacks_90d: null
+              } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Normalize KYC",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [920, 380]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ 'http://api:8000/analyze' }}",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ $json.normalized }}",
+        "options": { "throwHttpErrors": false }
+      },
+      "name": "Call AI-Core (/analyze)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1200, 260]
+    },
+    {
+      "parameters": {
+        "value1": "={{ $json[\"body\"]?.error?.code || $json[\"body\"]?.error?.message || '' }}",
+        "operation": "isNotEmpty",
+        "value2": ""
+      },
+      "name": "Is Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 380]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "contains",
+            "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}",
+            "value2": "BLOCK"
+          }
+        ],
+        "combineOperation": "any"
+      },
+      "name": "Is BLOCK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 140]
+    },
+    {
+      "parameters": {
+        "rules": [
+          {
+            "operation": "contains",
+            "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}",
+            "value2": "REVIEW"
+          }
+        ],
+        "combineOperation": "any"
+      },
+      "name": "Is REVIEW?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1440, 260]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://ops.example.internal/fraud/block",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.data?.id || $json.id, action: $json[\"body\"]?.data?.suggested_action, score: $json[\"body\"]?.data?.score, reasoning: $json[\"body\"]?.data?.reasoning, source_type: $json.source_type, meta: $json[\"body\"]?.meta || {} }) }}",
+        "options": { "throwHttpErrors": false }
+      },
+      "name": "Notify BLOCK Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1680, 120]
+    },
+    {
+      "parameters": {
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://crm.example.internal/api/cases",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.data?.id || $json.id, reason: $json[\"body\"]?.data?.reasoning || 'Manual review required', wizard_steps: $json[\"body\"]?.data?.wizard_steps || [], source_type: $json.source_type, meta: $json[\"body\"] }) }}",
+        "options": { "throwHttpErrors": false }
+      },
+      "name": "Create CRM Case (REVIEW)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1680, 240]
+    },
+    {
+      "parameters": {
+        "operation": "response",
+        "responseCode": 200,
+        "responseBody": "={{ { status: $json.body?.error ? 'error' : 'ok', id: $json.body?.data?.id || $json.id, action: $json.body?.data?.suggested_action, risk_level: $json.body?.data?.risk_level, error: $json.body?.error || null, source_type: $json.source_type } }}"
+      },
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1920, 260]
+    }
+  ],
+  "connections": {
+    "Webhook In (multi-source)": {
+      "main": [[{ "node": "Set Meta (id + source)", "type": "main", "index": 0 }]]
+    },
+    "Set Meta (id + source)": {
+      "main": [[{ "node": "Is Payments?", "type": "main", "index": 0 }]]
+    },
+    "Is Payments?": {
+      "main": [[{ "node": "Normalize Payments", "type": "main", "index": 0 }], [{ "node": "Is Login?", "type": "main", "index": 0 }]]
+    },
+    "Is Login?": {
+      "main": [[{ "node": "Normalize Login", "type": "main", "index": 0 }], [{ "node": "Is KYC?", "type": "main", "index": 0 }]]
+    },
+    "Is KYC?": {
+      "main": [[{ "node": "Normalize KYC", "type": "main", "index": 0 }]]
+    },
+    "Normalize Payments": {
+      "main": [[{ "node": "Call AI-Core (/analyze)", "type": "main", "index": 0 }]]
+    },
+    "Normalize Login": {
+      "main": [[{ "node": "Call AI-Core (/analyze)", "type": "main", "index": 0 }]]
+    },
+    "Normalize KYC": {
+      "main": [[{ "node": "Call AI-Core (/analyze)", "type": "main", "index": 0 }]]
+    },
+    "Call AI-Core (/analyze)": {
+      "main": [[{ "node": "Is BLOCK?", "type": "main", "index": 0 }], [{ "node": "Is REVIEW?", "type": "main", "index": 0 }], [{ "node": "Is Error?", "type": "main", "index": 0 }], [{ "node": "Return Response", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "Is Error?", "type": "main", "index": 0 }]]
+    },
+    "Is BLOCK?": {
+      "main": [[{ "node": "Notify BLOCK Endpoint", "type": "main", "index": 0 }], [{ "node": "Return Response", "type": "main", "index": 0 }]]
+    },
+    "Is REVIEW?": {
+      "main": [[{ "node": "Create CRM Case (REVIEW)", "type": "main", "index": 0 }], [{ "node": "Return Response", "type": "main", "index": 0 }]]
+    },
+    "Is Error?": {
+      "main": [[{ "node": "Return Response", "type": "main", "index": 0 }]]
+    },
+    "Notify BLOCK Endpoint": {
+      "main": [[{ "node": "Return Response", "type": "main", "index": 0 }]]
+    },
+    "Create CRM Case (REVIEW)": {
+      "main": [[{ "node": "Return Response", "type": "main", "index": 0 }]]
+    },
+    "Return Response": { "main": [] }
+  }
+}

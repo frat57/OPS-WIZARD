@@ -56,13 +56,13 @@
         "rules": [
           {
             "operation": "contains",
-            "value1": "={{ $json[\"body\"]?.suggested_action || '' }}",
-            "value2": "HOLD"
+            "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}",
+            "value2": "BLOCK"
           }
         ],
         "combineOperation": "any"
       },
-      "name": "Is HOLD?",
+      "name": "Is BLOCK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [960, 240]
@@ -72,24 +72,28 @@
         "rules": [
           {
             "operation": "contains",
-            "value1": "={{ $json[\"body\"]?.suggested_action || '' }}",
-            "value2": "MANUAL_REVIEW"
+            "value1": "={{ $json[\"body\"]?.data?.suggested_action || '' }}",
+            "value2": "REVIEW"
           }
         ],
         "combineOperation": "any"
       },
-      "name": "Is MANUAL?",
+      "name": "Is REVIEW?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [960, 360]
     },
     {
       "parameters": {
-        "channel": "#fraud-alerts",
-        "text": "={{ `ALERT: event ${$json[\"body\"]?.id || $json.id} recommended action=${$json[\"body\"]?.suggested_action} score=${$json[\"body\"]?.score}` }}"
+        "authentication": "none",
+        "requestMethod": "POST",
+        "url": "https://crm.example.internal/api/fraud-notify",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify({ external_id: $json[\"body\"]?.data?.id || $json.id, action: $json[\"body\"]?.data?.suggested_action, score: $json[\"body\"]?.data?.score, reasoning: $json[\"body\"]?.data?.reasoning, wizard_steps: $json[\"body\"]?.data?.wizard_steps || [], meta: $json[\"body\"]?.meta || {} }) }}",
+        "options": { "throwHttpErrors": false }
       },
-      "name": "Notify Slack (example)",
-      "type": "n8n-nodes-base.slack",
+      "name": "Notify Case API (example)",
+      "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [1200, 360]
     },
@@ -97,7 +101,7 @@
       "parameters": {
         "operation": "response",
         "responseCode": 200,
-        "responseBody": "={{ { status: 'ok', id: $json.body?.id || $json.id, action: $json.body?.suggested_action } }}"
+        "responseBody": "={{ { status: 'ok', id: $json.body?.data?.id || $json.id, action: $json.body?.data?.suggested_action, error: $json.body?.error || null } }}"
       },
       "name": "Return Response",
       "type": "n8n-nodes-base.respondToWebhook",

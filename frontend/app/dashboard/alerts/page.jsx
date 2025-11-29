@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from 'react'
 import useSWR from 'swr'
 
 const fetcher = (url) => fetch(url).then(r => r.json())
