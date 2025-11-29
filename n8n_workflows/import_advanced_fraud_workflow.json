@@ -1,0 +1,354 @@
+{
+    "workflow_versions":  [
+                              {
+                                  "id":  "b662e735-561d-4f86-924c-047e836e55fb",
+                                  "nodes":  [
+                                                {
+                                                    "parameters":  {
+                                                                       "httpMethod":  "POST",
+                                                                       "path":  "fraud-webhook",
+                                                                       "responseMode":  "lastNode",
+                                                                       "responseData":  "allEntries"
+                                                                   },
+                                                    "name":  "Webhook In",
+                                                    "type":  "n8n-nodes-base.webhook",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     200,
+                                                                     300
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "values":  {
+                                                                                      "string":  [
+                                                                                                     {
+                                                                                                         "name":  "id",
+                                                                                                         "value":  "={{ $json.id || \u0027evt-\u0027 + $randomString(8) }}"
+                                                                                                     }
+                                                                                                 ]
+                                                                                  },
+                                                                       "options":  {
+
+                                                                                   }
+                                                                   },
+                                                    "name":  "Set Meta",
+                                                    "type":  "n8n-nodes-base.set",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     440,
+                                                                     300
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "mode":  "sequential",
+                                                                       "limit":  5
+                                                                   },
+                                                    "name":  "Rate Limit (sequential)",
+                                                    "type":  "n8n-nodes-base.wait",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     680,
+                                                                     300
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "requestMethod":  "POST",
+                                                                       "url":  "={{ $json[\"env\"]?.BACKEND_URL || \u0027http://api:8000/analyze\u0027 }}",
+                                                                       "jsonParameters":  true,
+                                                                       "bodyParametersJson":  "={{ JSON.stringify({ amount: ($json.payload?.amount || $json.amount || 0), currency: ($json.payload?.currency || \u0027USD\u0027), merchant: ($json.payload?.merchant || $json.merchant || null), timestamp: ($json.payload?.timestamp || new Date().toISOString()), ip_address: ($json.payload?.ip_address || $json.payload?.ip || $json.ip || null), customer_id: ($json.payload?.customer_id || $json.customer_id || null) }) }}",
+                                                                       "options":  {
+                                                                                       "throwHttpErrors":  false
+                                                                                   }
+                                                                   },
+                                                    "name":  "Call AI-Core (/analyze)",
+                                                    "type":  "n8n-nodes-base.httpRequest",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     920,
+                                                                     300
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "rules":  [
+                                                                                     {
+                                                                                         "operation":  "contains",
+                                                                                         "value1":  "={{ $json[\"body\"]?.suggested_action || \u0027\u0027 }}",
+                                                                                         "value2":  "HOLD"
+                                                                                     }
+                                                                                 ],
+                                                                       "combineOperation":  "any"
+                                                                   },
+                                                    "name":  "Is HOLD?",
+                                                    "type":  "n8n-nodes-base.if",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1160,
+                                                                     220
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "rules":  [
+                                                                                     {
+                                                                                         "operation":  "contains",
+                                                                                         "value1":  "={{ $json[\"body\"]?.suggested_action || \u0027\u0027 }}",
+                                                                                         "value2":  "MANUAL_REVIEW"
+                                                                                     }
+                                                                                 ],
+                                                                       "combineOperation":  "any"
+                                                                   },
+                                                    "name":  "Is MANUAL?",
+                                                    "type":  "n8n-nodes-base.if",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1160,
+                                                                     380
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "channel":  "#fraud-alerts",
+                                                                       "text":  "={{ `ALERT: event ${$json[\"body\"]?.id || $json.id} recommended=${$json[\"body\"]?.suggested_action} score=${$json[\"body\"]?.score || \u0027\u0027}` }}"
+                                                                   },
+                                                    "name":  "Notify Slack",
+                                                    "type":  "n8n-nodes-base.slack",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1400,
+                                                                     360
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "authentication":  "none",
+                                                                       "requestMethod":  "POST",
+                                                                       "url":  "https://crm.example.internal/api/cases",
+                                                                       "jsonParameters":  true,
+                                                                       "bodyParametersJson":  "={{ JSON.stringify({ external_id: $json[\"body\"]?.id || $json.id, reason: $json[\"body\"]?.reasoning || \u0027Manual review required\u0027, meta: $json[\"body\"] }) }}",
+                                                                       "options":  {
+                                                                                       "throwHttpErrors":  false
+                                                                                   }
+                                                                   },
+                                                    "name":  "Create CRM Case (placeholder)",
+                                                    "type":  "n8n-nodes-base.httpRequest",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1400,
+                                                                     460
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "value1":  "={{ $json[\"body\"]?.statusCode || 200 }}",
+                                                                       "operation":  "isGreaterThan",
+                                                                       "value2":  299
+                                                                   },
+                                                    "name":  "Is Error?",
+                                                    "type":  "n8n-nodes-base.if",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1160,
+                                                                     560
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "mode":  "delay",
+                                                                       "delayFor":  1,
+                                                                       "delayUnit":  "minutes"
+                                                                   },
+                                                    "name":  "Wait / Retry Delay",
+                                                    "type":  "n8n-nodes-base.wait",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1400,
+                                                                     560
+                                                                 ]
+                                                },
+                                                {
+                                                    "parameters":  {
+                                                                       "operation":  "response",
+                                                                       "responseCode":  200,
+                                                                       "responseBody":  "={{ { status: \u0027ok\u0027, id: $json.body?.id || $json.id, action: $json.body?.suggested_action } }}"
+                                                                   },
+                                                    "name":  "Return Response",
+                                                    "type":  "n8n-nodes-base.respondToWebhook",
+                                                    "typeVersion":  1,
+                                                    "position":  [
+                                                                     1640,
+                                                                     300
+                                                                 ]
+                                                }
+                                            ],
+                                  "workflowId":  "3a322730-49a2-4a9f-8a7d-2c0001cee39b",
+                                  "name":  "AI Ops Wizard - Fraud Analyze (advanced)",
+                                  "connections":  {
+                                                      "Webhook In":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Set Meta",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                                      "Set Meta":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Rate Limit (sequential)",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                                      "Rate Limit (sequential)":  {
+                                                                                      "main":  [
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "Call AI-Core (/analyze)",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ]
+                                                                                               ]
+                                                                                  },
+                                                      "Call AI-Core (/analyze)":  {
+                                                                                      "main":  [
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "Is HOLD?",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ],
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "Is MANUAL?",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ],
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "Is Error?",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ],
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "Return Response",
+                                                                                                           "type":  "main",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ]
+                                                                                               ],
+                                                                                      "error":  [
+                                                                                                    [
+                                                                                                        {
+                                                                                                            "node":  "Is Error?",
+                                                                                                            "type":  "main",
+                                                                                                            "index":  0
+                                                                                                        }
+                                                                                                    ]
+                                                                                                ]
+                                                                                  },
+                                                      "Is HOLD?":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Return Response",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                                                      "Is MANUAL?":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Notify Slack",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Create CRM Case (placeholder)",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ],
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "Return Response",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                                      "Is Error?":  {
+                                                                        "main":  [
+                                                                                     [
+                                                                                         {
+                                                                                             "node":  "Wait / Retry Delay",
+                                                                                             "type":  "main",
+                                                                                             "index":  0
+                                                                                         }
+                                                                                     ]
+                                                                                 ]
+                                                                    },
+                                                      "Wait / Retry Delay":  {
+                                                                                 "main":  [
+                                                                                              [
+                                                                                                  {
+                                                                                                      "node":  "Call AI-Core (/analyze)",
+                                                                                                      "type":  "main",
+                                                                                                      "index":  0
+                                                                                                  }
+                                                                                              ]
+                                                                                          ]
+                                                                             },
+                                                      "Return Response":  {
+                                                                              "main":  [
+
+                                                                                       ]
+                                                                          }
+                                                  },
+                                  "settings":  {
+
+                                               },
+                                  "createdAt":  "2025-11-29T21:50:34Z",
+                                  "updatedAt":  "2025-11-29T21:50:34Z"
+                              }
+                          ],
+    "workflows":  [
+                      {
+                          "id":  "3a322730-49a2-4a9f-8a7d-2c0001cee39b",
+                          "createdAt":  "2025-11-29T21:50:34Z",
+                          "versionId":  "b662e735-561d-4f86-924c-047e836e55fb",
+                          "shared":  [
+
+                                     ],
+                          "tags":  [
+
+                                   ],
+                          "name":  "AI Ops Wizard - Fraud Analyze (advanced)",
+                          "updatedAt":  "2025-11-29T21:50:34Z",
+                          "active":  true,
+                          "settings":  {
+
+                                       }
+                      }
+                  ]
+}

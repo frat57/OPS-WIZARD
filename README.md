@@ -112,7 +112,7 @@ npm run dev
 
 
 ---
-Bu README MVP için bir başlangıç; isterseniz bir sonraki adım olarak:
+Sonraki adım olarak:
 - n8n workflow örnekleri (ops-wizard/n8n_workflows/),
 - Auth / secrets yönetimi (env/.env, Vault),
 - Basit Next.js (dashboard) örneği ekleyip webhook ile entegre edebilirim.
